@@ -70,10 +70,10 @@ var GameInfo = React.createClass({
                   Welcome to Match Pairs.  Each level starts out with pairs of cards that you match with each other.
                </p>
                <p>
-                  Each round you have 2 hints (which show all cards for 3 seconds), and 3 tries. 
+                  Each round you have 2 hints, and 3 tries.
                </p>
                <p>
-                  You have 30 seconds for round one, and 10 additional seconds for the subsequent levels.
+                  You have 20 seconds for round one, and 10 additional seconds for the subsequent levels.
                </p>
                <p>Press ESC to cancel an accidental selection (NOTE: you can only do this once per level)</p>
                <button className="btn btn-primary" onClick={this.startGame}>Start Game</button>
