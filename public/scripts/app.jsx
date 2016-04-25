@@ -1,4 +1,5 @@
 const CARDCHECKTIME = 300;
+var TIMER;
 
 var NumberCard = React.createClass({
    getInitialState: function() {
@@ -10,10 +11,11 @@ var NumberCard = React.createClass({
    },
    guessCard: function(card) {
       if (this.state.clickable && (this.props.guessesLeft > 0)) {
-         this.props.guessCard(card);
          this.setState({ 
             selected: true,
             clickable: false
+         }, function() {
+            this.props.guessCard(card);
          });
       }
    },
@@ -69,7 +71,10 @@ var GameInfo = React.createClass({
                   Welcome to Match Pairs.  Each level starts out with pairs of cards that you match with each other.
                </p>
                <p>
-                  Each round you have 2 hints (which show all cards for 3 seconds), and 3 tries.
+                  Each round you have 2 hints (which show all cards for 3 seconds), and 3 tries. 
+               </p>
+               <p>
+                  You have 30 seconds for round one, and 10 additional seconds for the subsequent levels.
                </p>
                <p>Press ESC to cancel an accidental selection (NOTE: you can only do this once per level)</p>
                <button className="btn btn-primary" onClick={this.startGame}>Start Game</button>
@@ -87,7 +92,9 @@ var GameBoard = React.createClass({
          pairs: this.props.pairs,
          level: this.props.level,
          startGame: false,
+         gameOver: false,
          hints: 2,
+         timer: 30,
          guessesLeft: 3,
          cancels: 1,
          cards: cards,
@@ -95,8 +102,17 @@ var GameBoard = React.createClass({
          selectedCards: []
       }
    },
+   componentDidUpdate: function() {
+      if (this.state.timer <= 0) {
+         this.setState({
+            gameOver: true
+         }, function() {
+            clearInterval(TIMER);
+         });
+      }
+   },
    makeCards: function(num) {
-      var cards = []
+      var cards = [];
       for (var i = 1; i <= num; i++) {
          cards.push(i);
          cards.push(i);
@@ -123,10 +139,17 @@ var GameBoard = React.createClass({
       return array;
    },
    startGame: function(time = this.state.level * 1500) {
+      var initial = this.getInitialState(),
+         gameTime = (this.state.timer > initial.timer) ? this.state.timer : initial.timer,
+         level = (this.state.level > initial.level) ? this.state.level: initial.level;
       this.setState({
-         startGame: true
+         startGame: true,
+         gameOver: false,
+         level: level,
+         guessesLeft: initial.guessesLeft,
+         timer: gameTime
       }, function() {
-         this.showHint(time);
+         this.showHint(time, true);
          document.addEventListener("keydown", this._clearSelected, false);
       }.bind(this));
    },
@@ -148,7 +171,7 @@ var GameBoard = React.createClass({
          this.refs['number'+ number].enableCard();
       }
    },
-   showHint: function(time = 3000) {
+   showHint: function(time = 3000, levelStart = false) {
       var cards = document.getElementsByClassName("number-card");
       for (var i = 0; i < cards.length; i++) {
          cards[i].classList.add("visible");
@@ -159,7 +182,19 @@ var GameBoard = React.createClass({
             cards[i].classList.remove("visible");
             this.refs['number'+ i].enableCard();
          }
+         if (levelStart) {
+            this.startTimer();
+         }
       }.bind(this), time);
+   },
+   startTimer: function() {
+      TIMER = setInterval(function() {
+         var gameTime = this.state.timer - 1;
+         console.log('timer running', gameTime);
+         this.setState({
+            timer: gameTime
+         });
+      }.bind(this), 1000);
    },
    guessCard: function(card) {
       if (this.state.guessesLeft > 0) {
@@ -171,15 +206,20 @@ var GameBoard = React.createClass({
 
          // check cards if it equals 2
          if (selectedCards.length >= 2) {
+            // check = number of guessesLeft
+            var check = this.checkMatch(selectedCards);
             this.disableCard();
-            this.checkMatch(selectedCards);
-            setTimeout(function() {
-               this.enableCard();
-            }.bind(this), CARDCHECKTIME);
+            if (check > 0) {
+               setTimeout(function() {
+                  this.enableCard();
+               }.bind(this), CARDCHECKTIME);
+            }
          }
       } 
    },
+   // Check if both cards are matching.  Returns the number of guesses left for the player
    checkMatch: function(cards) {
+      var guessesLeft = this.state.guessesLeft;
       if (cards[0].props.number === cards[1].props.number) {
          setTimeout(function() {
             var matchedCards = this.state.matchedCards;
@@ -197,47 +237,64 @@ var GameBoard = React.createClass({
       }
       // No match for both cards
        else {
-         var guessesLeft = this.state.guessesLeft;
-         guessesLeft--;
+         guessesLeft = guessesLeft - 1;
          this.setState({
             guessesLeft: guessesLeft
          });
 
          // No guesses left, game is over
          if (guessesLeft === 0) {
-            console.log(this.state.level);
             localStorage.setItem("matchCardsScore", this.state.level);
+
+            //Reset game to default level and cards
+            var cards = this.makeCards(this.props.pairs),
+               gameTime = this.getInitialState().timer;
+            setTimeout(function() {
+               this.setState({
+                  gameOver: true,
+                  level: 1,
+                  cards: cards,
+                  timer: gameTime
+               }, function() {
+                  clearInterval(TIMER);
+               });
+            }.bind(this), 600);
+         } else {
+            setTimeout(function() {
+               for (var i = 0; i < cards.length; i++) {
+                  cards[i].resetCard();
+               }
+            }, CARDCHECKTIME);
          }
-         setTimeout(function() {
-            for (var i = 0; i < cards.length; i++) {
-               cards[i].resetCard();
-            }
-         }, CARDCHECKTIME);
       }
       this.setState({
          selectedCards: []
       });
+      return guessesLeft;
    },
    checkWin: function() {
       if (this.state.matchedCards.length === this.state.cards.length / 2) {
          var that = this;
+         clearInterval(TIMER);
          setTimeout(function() {
             that.setState({
                cards: []
             }, function() {
                setTimeout(function() {
-                  var pairs = this.state.pairs + 1;
-                  var level = this.state.level + 1;
-                  var hs = localStorage.getItem("matchCardsScore");
+                  var pairs = this.state.pairs + 1,
+                     level = this.state.level + 1,
+                     hs = localStorage.getItem("matchCardsScore"),
+                     cards = this.makeCards(pairs),
+                     gameTime = this.getInitialState().timer + ((level - 1) * 10);
+                  console.log(gameTime);
                   if (level > hs) {
                      localStorage.setItem("matchCardsScore", level);
                   }
-                  var cards = this.makeCards(pairs);
                   this.setState({
                      pairs: pairs,
                      level: level,
-                     startGame: true,
                      hints: 2,
+                     timer: gameTime,
                      guessesLeft: 3,
                      cancels: 1,
                      cards: cards,
@@ -250,7 +307,7 @@ var GameBoard = React.createClass({
                         currCards[i].classList.remove("flipped");
                         currCards[i].classList.remove("valid");
                      }
-                     this.startGame();
+                     this.startGame(1500);
                   });
                }.bind(that), 1000)
             });
@@ -259,8 +316,8 @@ var GameBoard = React.createClass({
    },
    useHint: function() {
       if (this.state.hints > 0) {
-         this.showHint();
          var hints = this.state.hints - 1;
+         this.showHint(3000, false);
          this.setState({
             hints: hints
          });
@@ -268,8 +325,7 @@ var GameBoard = React.createClass({
    },
    _clearSelected:function(event){
       if(event.keyCode == 27 && this.state.cancels > 0){
-         var cancels = this.state.cancels;
-         cancels--;
+         var cancels = this.state.cancels - 1;
          this.state.selectedCards.forEach(function(card) {
             card.resetCard();
          });
@@ -281,33 +337,50 @@ var GameBoard = React.createClass({
    },
    render: function() {
       if (this.state.startGame) {
-         return (
-            <div className="container">
-               <div className="row">
-                  <div id="GameBoard" className="col-xs-10">
-                     {this.state.cards.map(function(number, idx) {
-                        return (
-                           <NumberCard
-                              number={number}
-                              key={idx}
-                              ref={'number' + idx}
-                              guessCard={this.guessCard}
-                              guessesLeft={this.state.guessesLeft} 
-                           />
-                        );
-                     }.bind(this))}
-                  </div>
-                  <div id="PlayerScore" className="col-xs-2">
-                     <PlayerControls 
-                        hints={this.state.hints}
-                        useHint={this.useHint}
-                        guessesLeft={this.state.guessesLeft}
-                        level={this.state.level}
-                     />
+         if (this.state.gameOver) {
+            return (
+               <div className="container">
+                  <div className="row">
+                     <div className="col-xs-6 col-xs-offset-3">
+                        <h1>Game Over!</h1>
+                        <p>
+                           Try Again?
+                        </p>
+                        <button className="btn btn-primary" onClick={this.startGame.bind(this, 1500)}>Start Game</button>
+                     </div>
                   </div>
                </div>
-            </div>
-         ); 
+            );
+         } else {
+            return (
+               <div className="container">
+                  <div className="row">
+                     <div id="GameBoard" className="col-xs-10">
+                        {this.state.cards.map(function(number, idx) {
+                           return (
+                              <NumberCard
+                                 number={number}
+                                 key={idx}
+                                 ref={'number' + idx}
+                                 guessCard={this.guessCard}
+                                 guessesLeft={this.state.guessesLeft} 
+                              />
+                           );
+                        }.bind(this))}
+                     </div>
+                     <div id="PlayerScore" className="col-xs-2">
+                        <PlayerControls 
+                           hints={this.state.hints}
+                           useHint={this.useHint}
+                           guessesLeft={this.state.guessesLeft}
+                           level={this.state.level}
+                           timer={this.state.timer}
+                        />
+                     </div>
+                  </div>
+               </div>
+            ); 
+         }
       } else {
          return (
             <div className="container">
@@ -323,15 +396,16 @@ var PlayerControls = React.createClass({
       this.props.useHint();
    },
    render: function () {
-      var disabled = (this.props.hints === 0);
-      var hs = localStorage.getItem("matchCardsScore");
-      var highScore = (!hs) ? "" : "High Score: " + hs;
+      var disabled = (this.props.hints === 0),
+            hs = localStorage.getItem("matchCardsScore"),
+            highScore = (!hs) ? "No high score!" : hs;
       return (
          <div>
             <h3>Level {this.props.level}</h3>
             <button className="btn btn-primary" disabled={disabled} onClick={this.useHint}>{this.props.hints} Hints Remaining</button>
             <p>{this.props.guessesLeft} tries left</p>
-            <p>{highScore}</p>
+            <p><strong>High Score</strong>: {highScore}</p>
+            <p><strong>Time Left</strong>: {this.props.timer}</p>
          </div>
       );
    }
