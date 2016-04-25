@@ -238,6 +238,7 @@ var GameBoard = React.createClass({
                this.setState({
                   gameOver: true,
                   level: 1,
+                  matchedCards: [],
                   cards: cards,
                   timer: gameTime
                }, function() {
