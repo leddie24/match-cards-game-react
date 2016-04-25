@@ -1,5 +1,4 @@
 const CARDCHECKTIME = 300;
-var TIMER;
 
 var NumberCard = React.createClass({
    getInitialState: function() {
@@ -84,6 +83,7 @@ var GameInfo = React.createClass({
    }
 });
 
+var TIMER;
 
 var GameBoard = React.createClass({
    getInitialState: function() {
@@ -94,7 +94,7 @@ var GameBoard = React.createClass({
          startGame: false,
          gameOver: false,
          hints: 2,
-         timer: 30,
+         timer: 20,
          guessesLeft: 3,
          cancels: 1,
          cards: cards,
@@ -104,12 +104,15 @@ var GameBoard = React.createClass({
    },
    componentDidUpdate: function() {
       if (this.state.timer <= 0) {
-         this.setState({
-            gameOver: true
-         }, function() {
-            clearInterval(TIMER);
-         });
+         this.endGame();
       }
+   },
+   endGame: function() {
+      clearInterval(TIMER);
+      this.setState({
+         gameOver: true,
+         timer: this.getInitialState().timer
+      });
    },
    makeCards: function(num) {
       var cards = [];
@@ -117,26 +120,8 @@ var GameBoard = React.createClass({
          cards.push(i);
          cards.push(i);
       }
-      cards = this.shuffleCards(cards);
+      cards = this._shuffleCards(cards);
       return cards;
-   },
-   shuffleCards: function(array) {
-      var currentIndex = array.length, temporaryValue, randomIndex;
-
-      // While there remain elements to shuffle...
-      while (0 !== currentIndex) {
-
-         // Pick a remaining element...
-         randomIndex = Math.floor(Math.random() * currentIndex);
-         currentIndex -= 1;
-
-         // And swap it with the current element.
-         temporaryValue = array[currentIndex];
-         array[currentIndex] = array[randomIndex];
-         array[randomIndex] = temporaryValue;
-      }
-
-      return array;
    },
    startGame: function(time = this.state.level * 1500) {
       var initial = this.getInitialState(),
@@ -190,7 +175,6 @@ var GameBoard = React.createClass({
    startTimer: function() {
       TIMER = setInterval(function() {
          var gameTime = this.state.timer - 1;
-         console.log('timer running', gameTime);
          this.setState({
             timer: gameTime
          });
@@ -286,7 +270,6 @@ var GameBoard = React.createClass({
                      hs = localStorage.getItem("matchCardsScore"),
                      cards = this.makeCards(pairs),
                      gameTime = this.getInitialState().timer + ((level - 1) * 10);
-                  console.log(gameTime);
                   if (level > hs) {
                      localStorage.setItem("matchCardsScore", level);
                   }
@@ -307,7 +290,7 @@ var GameBoard = React.createClass({
                         currCards[i].classList.remove("flipped");
                         currCards[i].classList.remove("valid");
                      }
-                     this.startGame(1500);
+                     this.startGame();
                   });
                }.bind(that), 1000)
             });
@@ -334,6 +317,24 @@ var GameBoard = React.createClass({
             cancels: cancels
          });
       }
+   },
+   _shuffleCards: function(array) {
+      var currentIndex = array.length, temporaryValue, randomIndex;
+
+      // While there remain elements to shuffle...
+      while (0 !== currentIndex) {
+
+         // Pick a remaining element...
+         randomIndex = Math.floor(Math.random() * currentIndex);
+         currentIndex -= 1;
+
+         // And swap it with the current element.
+         temporaryValue = array[currentIndex];
+         array[currentIndex] = array[randomIndex];
+         array[randomIndex] = temporaryValue;
+      }
+
+      return array;
    },
    render: function() {
       if (this.state.startGame) {
@@ -398,7 +399,7 @@ var PlayerControls = React.createClass({
    render: function () {
       var disabled = (this.props.hints === 0),
             hs = localStorage.getItem("matchCardsScore"),
-            highScore = (!hs) ? "No high score!" : hs;
+            highScore = (!hs) ? "1" : hs;
       return (
          <div>
             <h3>Level {this.props.level}</h3>
